@@ -1,0 +1,12 @@
+data/
+recordings/
+.venv/
+__pycache__/
+*.pyc
+*.log
+*.pid
+.env*
+*.pem
+*.p12
+*.key
+.DS_Store
