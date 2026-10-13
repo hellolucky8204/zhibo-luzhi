@@ -35,6 +35,12 @@ class LiveCapture:
             self.diagnostics['related_hosts']=dict(list(counts.items())[-30:])
         self.persist()
     def requestheaders(self,flow):
+        # HTTP media requests need not have a CONNECT event. Count only
+        # platform hostnames, never URLs, query strings or credentials.
+        host=flow.request.host.lower()
+        if allowed(host):
+            counts=self.diagnostics.setdefault('media_request_hosts',{})
+            counts[host]=counts.get(host,0)+1
         self.diagnostics['http_requests']+=1;self.persist()
     def tls_failed_client(self,data):
         self.diagnostics['tls_failures']+=1;self.persist()
@@ -58,6 +64,11 @@ class LiveCapture:
         tmp.replace(dest)
     def responseheaders(self,flow):
         if not allowed(flow.request.host):return
+        self.diagnostics['last_media_response']={
+            'host':flow.request.host.lower(),
+            'status':flow.response.status_code,
+            'content_type':flow.response.headers.get('content-type','')[:100],
+        }
         self.diagnostics['allowed_responses']+=1;self.persist()
         content_type=flow.response.headers.get('content-type','').lower()
         # Stream media immediately; never buffer a continuous FLV response.
