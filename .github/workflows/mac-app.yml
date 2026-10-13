@@ -1,0 +1,58 @@
+name: 构建苹果芯片应用
+on:
+  push:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/mac-app.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 安装构建依赖
+        run: |
+          python -m pip install -r desktop/packaging-requirements.txt
+          brew list ffmpeg >/dev/null 2>&1 || brew install ffmpeg
+          brew list node >/dev/null 2>&1 || brew install node
+          mkdir -p desktop/bin
+          cp "$(command -v ffmpeg)" desktop/bin/ffmpeg
+          cp "$(command -v node)" desktop/bin/node
+          test "$(uname -m)" = arm64
+      - name: 打包独立应用
+        run: python -m PyInstaller --noconfirm --workpath build --distpath dist desktop/build-mac.spec
+      - name: 验证内置运行环境
+        env:
+          LIVE_RECORDER_DATA: ${{ runner.temp }}/recorder-data
+          LIVE_RECORDER_RECORDINGS: ${{ runner.temp }}/recorder-recordings
+        run: 'dist/直播录制工作台.app/Contents/MacOS/直播录制工作台 --self-test'
+      - name: 验证后台启动与退出
+        env:
+          LIVE_RECORDER_DATA: ${{ runner.temp }}/recorder-data
+          LIVE_RECORDER_RECORDINGS: ${{ runner.temp }}/recorder-recordings
+          LIVE_RECORDER_HEADLESS: '1'
+        run: |
+          dist/直播录制工作台.app/Contents/MacOS/直播录制工作台 &
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8870/api/state > state.json; then break; fi
+            sleep 1
+          done
+          python -c 'import json; s=json.load(open("state.json")); assert s["ffmpeg"]; assert not s["anchors"]'
+          curl -fsS -X POST -H 'Content-Type: application/json' -d '{}' http://127.0.0.1:8870/api/desktop/stop
+      - name: 生成朋友验证包
+        run: |
+          cp desktop/应用验证说明.md dist/应用验证说明.md
+          ditto -c -k --sequesterRsrc --keepParent dist/直播录制工作台.app dist/直播录制工作台-苹果芯片-待验证.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 直播录制工作台-苹果芯片-待验证
+          path: |
+            dist/直播录制工作台-苹果芯片-待验证.zip
+            dist/应用验证说明.md
+          retention-days: 14

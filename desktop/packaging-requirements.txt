@@ -1,0 +1,3 @@
+streamget==4.0.10
+mitmproxy==12.2.3
+pyinstaller==6.22.3
